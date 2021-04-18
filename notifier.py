@@ -1,7 +1,8 @@
-#!/usr/bin/env python
 # This is a simple stock email notifier
 import json
 import time
+import logging
+import urllib.parse
 import http.client
 
 
@@ -16,9 +17,9 @@ notifications = []
 
 class Notification:
     def __init__(self, n):
-        self.symbol = n['SYMBOL']
-        self.price = n['PRICE']
-        self.percentage = n['PERCENTAGE']
+        self.symbol = n['symbol']
+        self.price = n['price']
+        self.percentage = n['percentage']
         self.current_price = None
         self.long = None
         self.notify = False
@@ -42,22 +43,27 @@ def create_report(notificytions):
 
 
 if __name__ == '__main__':
+    logging.basicConfig(filename='notifier.log', level=logging.DEBUG)
     try:
-        # read config and initialize
-        with open(FILE_NAME) as f:
+        logging.info("start")
+        # read file, init
+        with open(FILE_NAME, 'r') as f:
             data = json.load(f)
 
-        host = data['HOST']
-        api_key = data['API_KEY']
-        interval = data['INVTERVAL']
-        email = data['EMAIL']
+        host = data['host']
+        api_key = data['api_key']
+        interval = data['interval']
+        email = data['email']
 
-        for n in data['NOTIFICATIONS']:
+        for n in data['notifications']:
             notifications.append(Notification(n))
 
         symbols = ""
         for n in notifications:
-            symbols = "%s," % n.symbol
+            symbols = symbols + "%s," % n.symbol
+        symbols = symbols[:-1]
+        symbols = urllib.parse.quote(symbols)
+        logging.info(symbols)
 
         # https connection
         conn = http.client.HTTPSConnection(host)
@@ -65,22 +71,33 @@ if __name__ == '__main__':
             'x-rapidapi-key': api_key,
             'x-rapidapi-host': host
         }
+        logging.info(headers)
 
         while True:
             request = "/v6/finance/quote?symbols=%s&lang=en&region=US" % symbols
+            logging.info(request)
             conn.request("GET", request, headers=headers)
             res = conn.getresponse()
+            data = res.read()
+            data = data.decode()
+            data = json.loads(data)
+            logging.info(data)
 
-            for n in notifications:
-                # TODO navigate to correct list entry
-                n.current_price = res['regularMarketPrice']
-                if n.long is None:
-                    n.long = n.current_price < n.price
-                n.check_notification()
+            for i in range(len(notifications)):
+                if len(notifications) != len(data['quoteResponse']['result']):
+                    break
+                if notifications[i].symbol != data['quoteResponse']['result'][i]['symbol']:
+                    break
+
+                notifications[i].current_price = data['quoteResponse']['result'][i]['regularMarketPrice']
+
+                if notifications[i].long is None:
+                    notifications[i].long = notifications[i].current_price < notifications[i].price
+                notifications[i].check_notification()
 
             create_report(notifications.__contains__(n.notify))
             time.sleep(interval * 60)
 
-    except:
-        SystemExit('Invalid configuration')
+    except Exception as e:
+        logging.error("Exception occurred", exc_info=True)
 
