@@ -8,7 +8,7 @@ import http.client
 FILE_NAME = "config.json"
 
 host = "yahoo-finance-low-latency.p.rapidapi.com"
-api_key = "0123456789abcdefghijklmnopqrtsubwxyz0123456789abcde"
+api_key = "123456789012345678901234567890123456789012345678901"
 interval = 60
 email = "max@example.com"
 notifications = []
@@ -24,10 +24,12 @@ class Notification:
         self.notify = False
 
     def check_notification(self):
+        if self.current_price is None or self.long is None:
+            return
         if self.percentage == 0:
-            if self.long & self.current_price > self.price:
+            if self.long and self.current_price > self.price:
                 self.notify = True
-            elif not self.long & self.current_price < self.price:
+            elif not self.long and self.current_price < self.price:
                 self.notify = True
         else:
             div = self.percentage * self.price / 100
@@ -35,7 +37,7 @@ class Notification:
 
 
 def create_report(notificytions):
-    # TODO create email log report
+    # TODO create email and log report
     return
 
 
@@ -64,22 +66,21 @@ if __name__ == '__main__':
             'x-rapidapi-host': host
         }
 
+        while True:
+            request = "/v6/finance/quote?symbols=%s&lang=en&region=US" % symbols
+            conn.request("GET", request, headers=headers)
+            res = conn.getresponse()
+
+            for n in notifications:
+                # TODO navigate to correct list entry
+                n.current_price = res['regularMarketPrice']
+                if n.long is None:
+                    n.long = n.current_price < n.price
+                n.check_notification()
+
+            create_report(notifications.__contains__(n.notify))
+            time.sleep(interval * 60)
+
     except:
         SystemExit('Invalid configuration')
-
-    while True:
-        request = "/v6/finance/quote?symbols=%s&lang=en&region=US" % symbols
-        conn.request("GET", request, headers=headers)
-        res = conn.getresponse()
-
-        for n in notifications:
-            # TODO navigate to correct list entry
-            n.current_price = res['regularMarketPrice']
-            if n.long is None:
-                n.long = n.current_price < n.price
-            n.check_notification()
-
-        create_report(notifications.__contains__(n.notify))
-        time.sleep(interval * 60)
-
 
