@@ -1,6 +1,7 @@
 # StockNf
 Simple python stock email notifier
 
+## config.json example
 ```json config.json example
 {
   "host": "yahoo-finance-low-latency.p.rapidapi.com",
