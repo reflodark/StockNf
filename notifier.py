@@ -36,14 +36,20 @@ class Notification:
             div = self.percentage * self.price / 100
             # TODO calculate limits and notify
 
+    def __str__(self):
+        return "Symbol:%s Price:%s Percentage:%s Long:%s" % (self.symbol, self.price, self.percentage, self.long)
+
 
 def create_report(notificytions):
-    # TODO create email and log report
-    return
+    message = "Stock notification for: "
+    for n in notifications:
+        message += "\n%s" % n
+        n.notify = False
+    logging.info(message)
 
 
 if __name__ == '__main__':
-    logging.basicConfig(filename='notifier.log', level=logging.DEBUG)
+    logging.basicConfig(filename='notifier.log', format='%(asctime)s %(message)s', level=logging.DEBUG)
     try:
         logging.info("start")
         # read file, init
@@ -71,31 +77,37 @@ if __name__ == '__main__':
             'x-rapidapi-key': api_key,
             'x-rapidapi-host': host
         }
-        logging.info(headers)
 
         while True:
-            request = "/v6/finance/quote?symbols=%s&lang=en&region=US" % symbols
-            logging.info(request)
-            conn.request("GET", request, headers=headers)
-            res = conn.getresponse()
-            data = res.read()
-            data = data.decode()
-            data = json.loads(data)
-            logging.info(data)
+            try:
+                request = "/v6/finance/quote?symbols=%s&lang=en&region=US" % symbols
+                logging.info(request)
+                conn.request("GET", request, headers=headers)
+                res = conn.getresponse()
+                data = res.read()
+                data = data.decode()
+                data = json.loads(data)
+                logging.info(data)
 
-            for i in range(len(notifications)):
-                if len(notifications) != len(data['quoteResponse']['result']):
-                    break
-                if notifications[i].symbol != data['quoteResponse']['result'][i]['symbol']:
-                    break
+                for i in range(len(notifications)):
+                    if len(notifications) != len(data['quoteResponse']['result']):
+                        break
+                    if notifications[i].symbol != data['quoteResponse']['result'][i]['symbol']:
+                        break
 
-                notifications[i].current_price = data['quoteResponse']['result'][i]['regularMarketPrice']
+                    notifications[i].current_price = data['quoteResponse']['result'][i]['regularMarketPrice']
+                    if notifications[i].long is None:
+                        notifications[i].long = notifications[i].current_price < notifications[i].price
+                    notifications[i].check_notification()
 
-                if notifications[i].long is None:
-                    notifications[i].long = notifications[i].current_price < notifications[i].price
-                notifications[i].check_notification()
+                create_report([n for n in notifications if n.notify])
+            except http.client.HTTPException as e:
+                logging.error("Http exception", exc_info=True)
+            except Exception as e:
+                logging.error("Exception exception", exc_info=True)
 
-            create_report(notifications.__contains__(n.notify))
+            if interval < 1:
+                interval = 1
             time.sleep(interval * 60)
 
     except Exception as e:
