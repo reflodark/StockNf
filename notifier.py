@@ -41,6 +41,8 @@ class Notification:
 
 
 def create_report(notificytions):
+    if len(notificytions) < 1:
+        return
     message = "Stock notification for: "
     for n in notifications:
         message += "\n%s" % n
