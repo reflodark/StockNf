@@ -29,7 +29,7 @@ yag.send(subject="Great!")
   "api_key": "1234oiu1345oi123aslrktj2340958lkj234sdflkjdfklj999",
   "interval": 60,
   "email_sender": "sender@example.com",
-  "email_recipients": ['ra@example.com', 'rb@example.com'],
+  "email_recipients": ["ra@example.com", "rb@example.com"],
   "notifications": [
     { "symbol": "USDEUR=X", "price": 100, "percentage": 10 },
     { "symbol": "JNJ", "price": 100, "percentage": 10 }
