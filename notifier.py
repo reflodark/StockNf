@@ -4,14 +4,16 @@ import time
 import logging
 import urllib.parse
 import http.client
+import yagmail
 
 
-FILE_NAME = "config.json"
+FILE_NAME = 'config.json'
 
-host = "yahoo-finance-low-latency.p.rapidapi.com"
-api_key = "123456789012345678901234567890123456789012345678901"
+host = 'yahoo-finance-low-latency.p.rapidapi.com'
+api_key = '123456789012345678901234567890123456789012345678901'
 interval = 60
-email = "max@example.com"
+email_recipients = ['r1@example.com', 'r2@example.com']
+email_sender = 'sender@example.com'
 notifications = []
 
 
@@ -20,6 +22,7 @@ class Notification:
         self.symbol = n['symbol']
         self.price = n['price']
         self.percentage = n['percentage']
+        self.reference_price = None
         self.current_price = None
         self.long = None
         self.notify = False
@@ -30,30 +33,44 @@ class Notification:
         if self.percentage == 0:
             if self.long and self.current_price > self.price:
                 self.notify = True
+                self.long = False
+                logging.info('N')
             elif not self.long and self.current_price < self.price:
                 self.notify = True
+                self.long = True
         else:
-            div = self.percentage * self.price / 100
-            # TODO calculate limits and notify
+            margin_high = self.reference_price + self.price * self.percentage / 100
+            margin_low = self.reference_price - self.price * self.percentage / 100
+            margin_low = margin_low if margin_low > 0 else 0
+
+            if margin_low > self.current_price or margin_high < self.current_price:
+                self.notify = True
+                self.reference_price = self.current_price
 
     def __str__(self):
-        return "Symbol:%s Price:%s Percentage:%s Long:%s" % (self.symbol, self.price, self.percentage, self.long)
+        if self.percentage == 0:
+            return 'Symbol:%s Price:%s Long:%s Current Price:%s' % (self.symbol, self.price, not self.long,
+                                                                    self.current_price)
+        else:
+            return 'Symbol:%s Price:%s Percentage:%s Reference price:%s' % (self.symbol, self.price, self.percentage,
+                                                                            self.reference_price)
 
 
-def create_report(notificytions):
-    if len(notificytions) < 1:
+def create_report(notifications):
+    if not notifications:
         return
-    message = "Stock notification for: "
+    message = 'Stock notification for: '
     for n in notifications:
         message += "\n%s" % n
         n.notify = False
-    logging.info(message)
+    yag.send(to=email_recipients, subject='StockNf', contents=message)
+    logging.info("Email sent: %s" % message)
 
 
 if __name__ == '__main__':
     logging.basicConfig(filename='notifier.log', format='%(asctime)s %(message)s', level=logging.DEBUG)
     try:
-        logging.info("start")
+        logging.info('start')
         # read file, init
         with open(FILE_NAME, 'r') as f:
             data = json.load(f)
@@ -61,14 +78,16 @@ if __name__ == '__main__':
         host = data['host']
         api_key = data['api_key']
         interval = data['interval']
-        email = data['email']
+        email_sender = data['email_sender']
+        email_recipients = data['email_recipients']
+        yag = yagmail.SMTP(email_sender)
 
         for n in data['notifications']:
             notifications.append(Notification(n))
 
-        symbols = ""
+        symbols = ''
         for n in notifications:
-            symbols = symbols + "%s," % n.symbol
+            symbols = symbols + '%s,' % n.symbol
         symbols = symbols[:-1]
         symbols = urllib.parse.quote(symbols)
         logging.info(symbols)
@@ -82,36 +101,36 @@ if __name__ == '__main__':
 
         while True:
             try:
-                request = "/v6/finance/quote?symbols=%s&lang=en&region=US" % symbols
-                logging.info(request)
-                conn.request("GET", request, headers=headers)
+                request = '/v6/finance/quote?symbols=%s&lang=en&region=US' % symbols
+                conn.request('GET', request, headers=headers)
                 res = conn.getresponse()
                 data = res.read()
                 data = data.decode()
                 data = json.loads(data)
                 logging.info(data)
 
-                for i in range(len(notifications)):
+                i = 0
+                for n in notifications:
                     if len(notifications) != len(data['quoteResponse']['result']):
                         break
-                    if notifications[i].symbol != data['quoteResponse']['result'][i]['symbol']:
+                    if n.symbol != data['quoteResponse']['result'][i]['symbol']:
                         break
-
-                    notifications[i].current_price = data['quoteResponse']['result'][i]['regularMarketPrice']
-                    if notifications[i].long is None:
-                        notifications[i].long = notifications[i].current_price < notifications[i].price
-                    notifications[i].check_notification()
+                    n.current_price = data['quoteResponse']['result'][i]['regularMarketPrice']
+                    if n.reference_price is None:
+                        n.reference_price = data['quoteResponse']['result'][i]['regularMarketPrice']
+                    if n.long is None:
+                        n.long = n.current_price < n.price
+                    n.check_notification()
+                    i += 1
 
                 create_report([n for n in notifications if n.notify])
             except http.client.HTTPException as e:
-                logging.error("Http exception", exc_info=True)
-            except Exception as e:
-                logging.error("Exception exception", exc_info=True)
+                logging.error('Http exception', exc_info=True)
 
             if interval < 1:
                 interval = 1
             time.sleep(interval * 60)
 
     except Exception as e:
-        logging.error("Exception occurred", exc_info=True)
+        logging.error('Exception occurred', exc_info=True)
 
