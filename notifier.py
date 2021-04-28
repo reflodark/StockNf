@@ -22,9 +22,12 @@ class Notification:
         self.symbol = n['symbol']
         self.price = n['price']
         self.percentage = n['percentage']
-        self.reference_price = None
-        self.current_price = None
         self.long = None
+        self.current_price = None
+        self.reference_price = None
+        self.last_reference_price = None
+        self.margin_high = None
+        self.margin_low = None
         self.notify = False
 
     def check_notification(self):
@@ -34,26 +37,38 @@ class Notification:
             if self.long and self.current_price > self.price:
                 self.notify = True
                 self.long = False
-                logging.info('N')
             elif not self.long and self.current_price < self.price:
                 self.notify = True
                 self.long = True
         else:
-            margin_high = self.reference_price + self.price * self.percentage / 100
-            margin_low = self.reference_price - self.price * self.percentage / 100
-            margin_low = margin_low if margin_low > 0 else 0
+            self.margin_high = round(self.reference_price + self.price * self.percentage / 100)
+            self.margin_low = round(self.reference_price - self.price * self.percentage / 100)
+            self.margin_low = self.margin_low if self.margin_low > 0 else 0
 
-            if margin_low > self.current_price or margin_high < self.current_price:
+            if self.margin_low > self.current_price or self.margin_high < self.current_price:
                 self.notify = True
+                self.last_reference_price = self.reference_price
                 self.reference_price = self.current_price
+
+        logging.info('Notification check: %s, %s' % (self.notify, self))
 
     def __str__(self):
         if self.percentage == 0:
-            return 'Symbol:%s Price:%s Long:%s Current Price:%s' % (self.symbol, self.price, not self.long,
-                                                                    self.current_price)
+            long = self.long if not self.notify else not self.long
+            return 'Symbol:%s Price:%s Long:%s Current Price:%s' % (
+                self.symbol,
+                self.price,
+                long,
+                self.current_price)
         else:
-            return 'Symbol:%s Price:%s Percentage:%s Reference price:%s' % (self.symbol, self.price, self.percentage,
-                                                                            self.reference_price)
+            return 'Symbol:%s Price:%s Percentage:%s Current Price:%s Reference price:%s Margin l/h:%s/%s' % (
+                self.symbol,
+                self.price,
+                self.percentage,
+                self.current_price,
+                self.last_reference_price,
+                self.margin_low,
+                self.margin_high)
 
 
 def create_report(notifications):
@@ -63,12 +78,13 @@ def create_report(notifications):
     for n in notifications:
         message += "\n%s" % n
         n.notify = False
+    yag.send_unsent()
     yag.send(to=email_recipients, subject='StockNf', contents=message)
     logging.info("Email sent: %s" % message)
 
 
 if __name__ == '__main__':
-    logging.basicConfig(filename='notifier.log', format='%(asctime)s %(message)s', level=logging.DEBUG)
+    logging.basicConfig(filename='notifier.log', format='%(asctime)s %(levelname)s %(message)s', level=logging.DEBUG)
     try:
         logging.info('start')
         # read file, init
@@ -102,6 +118,7 @@ if __name__ == '__main__':
         while True:
             try:
                 request = '/v6/finance/quote?symbols=%s&lang=en&region=US' % symbols
+                conn.connect()
                 conn.request('GET', request, headers=headers)
                 res = conn.getresponse()
                 data = res.read()
@@ -111,26 +128,43 @@ if __name__ == '__main__':
 
                 i = 0
                 for n in notifications:
+                    # validation
                     if len(notifications) != len(data['quoteResponse']['result']):
+                        logging.error('len: %s, %s' % (len(notifications), len(data['quoteResponse']['result'])))
                         break
                     if n.symbol != data['quoteResponse']['result'][i]['symbol']:
+                        logging.error('symbol: %s, %s' % (n.symbol, data['quoteResponse']['result'][i]['symbol']))
                         break
+                    # data handling
                     n.current_price = data['quoteResponse']['result'][i]['regularMarketPrice']
                     if n.reference_price is None:
-                        n.reference_price = data['quoteResponse']['result'][i]['regularMarketPrice']
+                        n.reference_price = n.current_price
+                        n.last_reference_price = n.reference_price
                     if n.long is None:
                         n.long = n.current_price < n.price
                     n.check_notification()
                     i += 1
 
                 create_report([n for n in notifications if n.notify])
-            except http.client.HTTPException as e:
-                logging.error('Http exception', exc_info=True)
+                conn.close()
+            except http.client.HTTPException:
+                logging.exception('HTTP exception', exc_info=True)
+            except yagmail.YagConnectionClosed:
+                logging.exception('Yagmail connection closed', exc_info=True)
+                yag.login()
 
             if interval < 1:
                 interval = 1
             time.sleep(interval * 60)
 
-    except Exception as e:
-        logging.error('Exception occurred', exc_info=True)
+    except http.client.HTTPException:
+        logging.exception('HTTP exception', exc_info=True)
+    except yagmail.YagAddressError:
+        logging.exception('YagAddressError', exc_info=True)
+    except Exception:
+        logging.critical('Exception occurred', exc_info=True)
+    finally:
+        conn.close()
+        yag.close()
+        logging.info('Exit')
 
