@@ -1,5 +1,5 @@
-# StockNf
-Simple python stock email notifier
+# qtockNf
+Simple python quote email notifier
 
 Notify at a set margin or percentage
 | :exclamation:  Note that a too low interval, might exceed the daily free quota!   |
