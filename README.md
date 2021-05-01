@@ -1,4 +1,4 @@
-# qtockNf
+# quotekNf
 Simple python quote email notifier
 
 Notify at a set margin or percentage
