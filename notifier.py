@@ -221,7 +221,7 @@ if __name__ == '__main__':
                     if n.reference_price is None or n.last_reference_price is None:
                         n.reference_price = n.current_price
                         n.last_reference_price = n.reference_price
-                    if n.long is None:
+                    if n.long is None and n.price is not None:
                         n.long = n.current_price < n.price
                     n.check_notification()
 
