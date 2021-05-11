@@ -44,7 +44,7 @@ class Notification:
         Check if it's necessary to notify for each possible setting
         :return:
         '''
-        if self.current_price is None or self.long is None:
+        if self.current_price is None:
             return
 
         # Fixed price limit
