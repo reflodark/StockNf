@@ -108,14 +108,14 @@ class Notification:
             logging.info('Recovery data set for %s' % self)
 
     def __str__(self):
-        long = self.long if not self.notify else not self.long
+        reference_price = self.reference_price if not self.notify else self.last_reference_price
         return 'Symbol:%s Price:%s Percentage:%s Spread: %s Current Price:%s Reference price:%s Margin l/h:%s/%s' % (
             self.symbol,
             self.price,
             self.percentage,
             self.spread,
             self.current_price,
-            self.last_reference_price,
+            reference_price,
             self.margin_low,
             self.margin_high)
 
