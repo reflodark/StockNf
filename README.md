@@ -1,6 +1,8 @@
 # quoteNf
 Simple python quote email notifier.
 
+The sole purpose of this project was to try out Phython...
+
 At first config file is loaded afterwards previous settings are restored (restart).
 If you want a fresh start, simply remove the recovery.json file
 
